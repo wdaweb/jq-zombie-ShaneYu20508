@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    <style>
+        #game {
+            width: 1280px;
+            height: 572px;
+            margin: auto;
+            border: 1px solid black;
+            background-image: url(/img/bar.jpg);
+            background-repeat: no-repeat;
+            position: relative;
+            overflow: hidden;
+            cursor: url(./img/cursor.png)50 50, auto;
+        }
+
+        #game img {
+            height: 100px;
+            position: absolute;
+            /* 無法反白 */
+            user-select: none;
+
+            /* 無法拖曳 */
+            -webkit-user-drag: none;
+        }
+
+        .game-area {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            display: flex;
+        }
+
+        .game-block {
+            width: 30%;
+            height: 17%;
+            position: absolute;
+            overflow: hidden;
+        }
+
+        .bottle {
+            height: 100%;
+            position: absolute;
+            user-select: none;
+            -webkit-user-drag: none;
+        }
+
+        .pow {
+            width: 100px;
+            height: 100px;
+            pointer-events: none;
+        }
+    </style>
+</head>
+
+<body>
+    <input type="button" value="開始" id="btn-start">
+    <br>
+    <p>分數: <span id="text-score">0</span></p>
+    <p>剩餘: <span id="text-time">0</span>秒</p>
+    <p>最高分玩家: <span id="text-hsname"></span>快槍俠</p>
+    <p>最高分分數: <span id="text-hsscore"></span></p>
+    <p>剩餘子彈: <span id="text-bullets"></span></p>
+    <hr>
+    <audio src="./mp3/load.wav" id="load"></audio>
+    <audio src="./mp3/shot.mp3" id="bang"></audio>
+    <div id="game" class="game-area">
+        <div class="game-block" style="top: 25%; left: 1%;"></div>
+        <div class="game-block" style="top: 54%; left: 1%;"></div>
+        <div class="game-block" style="top: 25%; left: 68%;"></div>
+        <div class="game-block" style="top: 54%; left: 69%;"></div>
+    </div>
+    <script src='https://cdnjs.cloudflare.com/ajax/libs/sweetalert2/11.7.32/sweetalert2.all.min.js'
+        integrity='sha512-zB7yJLSASiSevQmWCrQaq+z/f5zRIa884hwWgmK1oI3MfolIzKcpDtyfBsrGqUi/hMCObVwr/+SZTByOqh0zkQ=='
+        crossorigin='anonymous'></script>
+    <script src='https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js'
+        integrity='sha512-v2CJ7UaYy4JwqLDIrZUI/4hqeoQieOmAZNXBeQyjo21dadnwR+8ZaIJVT8EE2iyI61OV8e6M8PP2/4hpQINQ/g=='
+        crossorigin='anonymous'></script>
+
+    <script>
+        let score = 0;
+        let time = 0;
+        let timer = 0;
+        let round = 1;
+        const totalRounds = 3;
+        let bullets = 6;
+
+        // 裝子彈音效
+        $('body').append('<audio src="./mp3/load.wav" id="load"></audio>')
+        // 槍聲
+        $('body').append('<audio src="./mp3/shot.mp3" id="bang"></audio>')
+
+        const hs = {
+            name: '-',
+            score: 0
+        }
+
+        if (localStorage.hs) {
+            const data = JSON.parse(localStorage.hs)
+            hs.name = data.name
+            hs.score = data.score
+            $('#text-hsname').text(hs.name)
+            $('#text-hsscore').text(hs.score)
+        }
+
+        // 開始遊戲
+        $('#btn-start').click(function () {
+            $('.game-block').empty();
+            $(this).attr('disabled', true);
+            score = 0;
+            round = 1; // 重置回合数
+            $('#text-score').text(score);
+            startRound();
+            loadSound()
+        });
+
+        // 開始每一輪
+        function startRound() {
+            // 開始每一輪先清空上一輪的瓶子
+            $('.game-block').empty()
+
+            bullets = 6
+            showBullet()
+
+            // 設定第一個回合 8 秒，並且進入下一回合時間減半
+            time = 8 / Math.pow(2, round - 1);
+            $('#text-time').text(time);
+
+            // 酒瓶區域
+            const selectedBlocks = $('.game-block').get().sort(() => Math.random() - 0.5).slice(0, 4);
+
+            // 在 4 個區塊中隨機生成四個瓶子，在將剩下的兩個雖積分到 4 個區塊中
+            for (let i = 0; i < 6; i++) {
+                const block = (i < 4) ? selectedBlocks[i] : $('.game-block').eq(Math.floor(Math.random() * 4));
+                createBottle($(block));
+            }
+
+            timer = setInterval(function () {
+                time--;
+                $('#text-time').text(time);
+                if (time === 0) {
+                    clearInterval(timer);
+                    // 如果回合數小於 3 輪，繼續下一輪
+                    if (round < totalRounds) {
+                        round++;
+                        startRound();
+                        loadSound()
+                        // 如果回合數不小於 3 輪，結束遊戲
+                    } else {
+                        endGame();
+                    }
+                }
+            }, 1000);
+        }
+
+        // 顯示剩餘子彈
+        function showBullet() {
+            $('#text-bullets').text(bullets)
+        }
+
+        // 遊戲結束
+        function endGame() {
+            $('#btn-start').attr('disabled', false);
+            // 在這裡新增 empty() 會導致下一個人沒有瓶子打
+            // $('#game').empty();
+
+            //結束提示
+            if (score > hs.score) {
+                Swal.fire({
+                    icon: 'success',
+                    title: '遊戲結束',
+                    text: `新的快槍手來到鎮上了，他得了${score}分`,
+                    input: 'text',
+                    inputAttribute: {
+                        required: true
+                    },
+                    inputPlaceholder: '請輸入你的名字',
+                    validationMessage: '請輸入你的名字',
+                    allowOutsideClick: false,
+                    allowEscapeKey: false,
+                }).then(function (result) {
+                    hs.score = score;
+                    hs.name = result.value;
+                    $('#text-hsname').text(hs.name);
+                    $('#text-hsscore').text(hs.score);
+                    localStorage.hs = JSON.stringify(hs);
+                })
+            } else {
+                Swal.fire({
+                    icon: 'info',
+                    title: '遊戲結束',
+                    text: `你得到${score}分`
+                })
+            }
+        }
+
+        // 隨機生成 上下高度一致，左右隨機分配
+        function randomPosition() {
+            const randomLeft = Math.random() * 80;
+            return { left: `${randomLeft}%` };
+        }
+
+        // 生成瓶子
+        function createBottle(block) {
+            const position = randomPosition();
+            const bottle = $('<img src="/img/bottle.png" class="bottle">');
+            bottle.css({ left: position.left, top: position.top });
+            block.append(bottle);
+            bindClickEvent(bottle);
+        }
+
+        function bindClickEvent(bottle) {
+            bottle.click(function () {
+                if (bullets > 0) {
+                    const shot = $('')
+                    score++;
+                    bullets--;
+                    showBullet()
+                    $('#text-score').text(score);
+                }
+            });
+        }
+
+        // 裝子彈
+        function loadSound() {
+            const load = document.getElementById('load')
+            load.play()
+        }
+
+        const bang1 = new Audio('./mp3/shot.mp3')
+        const bang2 = new Audio('./mp3/shot.mp3')
+        const bang3 = new Audio('./mp3/shot.mp3')
+        const bang4 = new Audio('./mp3/shot.mp3')
+        const bang5 = new Audio('./mp3/shot.mp3')
+        const bang6 = new Audio('./mp3/shot.mp3')
+
+        let currentBang = bang1;
+
+        // 射擊
+        // 因為無法一個音檔連續快速撥放，因此設定多個讓他輪流撥放
+        function shotSound() {
+            currentBang.play();
+            if (currentBang === bang1) currentBang = bang2;
+            else if (currentBang === bang2) currentBang = bang3;
+            else if (currentBang === bang3) currentBang = bang4;
+            else if (currentBang === bang4) currentBang = bang5;
+            else if (currentBang === bang5) currentBang = bang6;
+            else currentBang = bang1;
+        }
+
+        $('#game').mousedown(function (event) {
+            // 子彈數量大於 0，減少一顆子彈，隱藏點擊的瓶子，並增加分數
+            if (bullets > 0) {
+                bullets--;
+                shotSound();
+                showBullet();
+                const pow = $('<img src="./img/pow.png" class="pow">');
+                pow.css({ left: event.clientX - 360, top: event.clientY - 280 });
+                $(this).append(pow)
+                setTimeout(function () {
+                    pow.remove();
+                }, 200);
+
+
+                const clickedBottle = $(event.target);
+
+                if (clickedBottle.hasClass('bottle')) {
+                    clickedBottle.hide().addClass('pow');
+                    score++;
+                    $('#text-score').text(score);
+                }
+            } else {
+                Swal.fire({
+                    icon: 'info',
+                    title: '沒有子彈了',
+                    text: `等待下一輪`
+                })
+            }
+        });
+
+    </script>
+</body>
+
+</html>
